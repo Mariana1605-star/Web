@@ -4,7 +4,7 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-define('UPLOAD_DIR', __DIR__ . '/img/uploads/');
+define('UPLOAD_DIR', __DIR__ . 'img' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR);
 define('UPLOAD_URL', 'img/uploads/');
 
 if (!is_dir(UPLOAD_DIR)) {
@@ -27,7 +27,41 @@ if ($method === 'GET') {
     exit;
 }
 
-function procesarArchivo(array $file, array $tipos, int $maxSize): string {
+function guardarArchivoEnDisco(string $tmpPath, int $tamanoBytes,
+                                array $tiposPermitidos, int $maxSize): string {
+    if ($tamanoBytes > $maxSize) {
+        throw new RuntimeException('El archivo supera el límite de ' . ($maxSize / 1024 / 1024) . ' MB');
+    }
+    if (!file_exists($tmpPath) || !is_readable($tmpPath)) {
+        throw new RuntimeException('No se puede leer el archivo temporal');
+    }
+
+    $finfo    = new finfo(FILEINFO_MIME_TYPE);
+    $mimeReal = $finfo->file($tmpPath);
+
+    if (!in_array($mimeReal, $tiposPermitidos, true)) {
+        throw new RuntimeException('Tipo no permitido. Solo JPG, PNG, GIF o WebP.');
+    }
+
+    $extMap  = ['image/jpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp'];
+    $ext     = $extMap[$mimeReal];
+    $nombre  = 'img_' . bin2hex(random_bytes(8)) . '.' . $ext;
+    $destino = UPLOAD_DIR . $nombre;
+
+    if (!@copy($tmpPath, $destino)) {
+        $contenido = file_get_contents($tmpPath);
+        if ($contenido === false || file_put_contents($destino, $contenido) === false) {
+            throw new RuntimeException('No se pudo guardar el archivo. Verifica los permisos de img/uploads/');
+        }
+    }
+    @chmod($destino, 0644);
+
+    return UPLOAD_URL . $nombre;
+}
+
+
+
+function procesarFilesPost(array $file, array $tipos, int $maxSize): string {
     $errores = [
         UPLOAD_ERR_INI_SIZE   => 'El archivo supera el límite del servidor',
         UPLOAD_ERR_FORM_SIZE  => 'El archivo supera el límite del formulario',
@@ -35,35 +69,14 @@ function procesarArchivo(array $file, array $tipos, int $maxSize): string {
         UPLOAD_ERR_NO_FILE    => 'No se seleccionó archivo',
         UPLOAD_ERR_NO_TMP_DIR => 'Falta directorio temporal en el servidor',
         UPLOAD_ERR_CANT_WRITE => 'No se pudo escribir en disco',
-        UPLOAD_ERR_EXTENSION  => 'Extensión PHP bloqueó la subida',
+        UPLOAD_ERR_EXTENSION  => 'Una extensión PHP bloqueó la subida',
     ];
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        throw new RuntimeException($errores[$file['error']] ?? 'Error al subir archivo');
+        throw new RuntimeException($errores[$file['error']] ?? 'Error al subir (código ' . $file['error'] . ')');
     }
-    if ($file['size'] > $maxSize) {
-        throw new RuntimeException('El archivo supera el límite de ' . ($maxSize / 1024 / 1024) . ' MB');
-    }
-
-    $finfo    = finfo_open(FILEINFO_MIME_TYPE);
-    $mimeReal = finfo_file($finfo, $file['tmp_name']);
-    finfo_close($finfo);
-
-    if (!in_array($mimeReal, $tipos, true)) {
-        throw new RuntimeException('Tipo no permitido. Solo JPG, PNG, GIF o WebP.');
-    }
-
-    $ext  = ['image/jpeg' => 'jpg', 'image/png' => 'png',
-             'image/gif' => 'gif', 'image/webp' => 'webp'][$mimeReal];
-    $dest = UPLOAD_DIR . uniqid('img_', true) . '.' . $ext;
-
-    $ok = isset($file['_raw'])
-        ? (file_put_contents($dest, $file['_raw']) !== false)
-        : move_uploaded_file($file['tmp_name'], $dest);
-
-    if (!$ok) throw new RuntimeException('No se pudo guardar el archivo');
-
-    return UPLOAD_URL . basename($dest);
+    return guardarArchivoEnDisco($file['tmp_name'], $file['size'], $tipos, $maxSize);
 }
+
 
 function insertarImagen(PDO $db, string $titulo, string $desc,
                         string $url, int $activo, int $orden): int {
@@ -83,32 +96,72 @@ function insertarImagen(PDO $db, string $titulo, string $desc,
     return (int)$db->lastInsertId();
 }
 
+function borrarArchivoLocal(?string $urlRelativa): void {
+    if (empty($urlRelativa)) return;
+    if (strpos($urlRelativa, 'http') === 0) return;
+    if (strpos($urlRelativa, UPLOAD_URL) === false) return;
+
+    $ruta = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $urlRelativa);
+    if (file_exists($ruta)) @unlink($ruta);
+}
+
 if ($method === 'POST') {
     header('Content-Type: application/json');
 
-    $esMultipart = str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data');
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    $esMultipart = stripos($contentType, 'multipart/form-data') !== false;
 
     if ($esMultipart) {
+        $esActualizacion = (trim($_POST['_method'] ?? '') === 'PUT');
+        $id_edit         = intval($_POST['id'] ?? 0);
+
         $titulo      = trim($_POST['titulo']      ?? '');
         $descripcion = trim($_POST['descripcion'] ?? '');
         $orden       = intval($_POST['orden']     ?? 0);
-        $activo      = isset($_POST['activo']) ? (int)(bool)$_POST['activo'] : 1;
+        $activo      = isset($_POST['activo'])
+            ? (int)filter_var($_POST['activo'], FILTER_VALIDATE_BOOLEAN)
+            : 1;
 
         if (empty($titulo)) {
             http_response_code(422);
             echo json_encode(['exito'=>false,'mensaje'=>'El título es requerido']); exit;
         }
-        if (empty($_FILES['archivo']) || $_FILES['archivo']['error'] === UPLOAD_ERR_NO_FILE) {
+
+        if (!isset($_FILES['archivo']) || $_FILES['archivo']['error'] === UPLOAD_ERR_NO_FILE) {
             http_response_code(422);
-            echo json_encode(['exito'=>false,'mensaje'=>'No se envió ningún archivo']); exit;
+            echo json_encode(['exito'=>false,'mensaje'=>'No se seleccionó ningún archivo']); exit;
         }
 
         try {
-            $url_imagen = procesarArchivo($_FILES['archivo'], $TIPOS_PERMITIDOS, $TAMANO_MAX);
+            $url_imagen = procesarFilesPost($_FILES['archivo'], $TIPOS_PERMITIDOS, $TAMANO_MAX);
         } catch (RuntimeException $e) {
             http_response_code(422);
             echo json_encode(['exito'=>false,'mensaje'=>$e->getMessage()]); exit;
         }
+
+        if ($esActualizacion && $id_edit) {
+            $stOld = $db->prepare("SELECT url_imagen FROM imagenes WHERE id = :id");
+            $stOld->execute([':id' => $id_edit]);
+            $old   = $stOld->fetch();
+            if ($old) borrarArchivoLocal($old['url_imagen']);
+
+            $db->prepare(
+                "UPDATE imagenes
+                 SET titulo=:titulo, descripcion=:descripcion,
+                     url_imagen=:url_imagen, activo=:activo, orden=:orden
+                 WHERE id=:id"
+            )->execute([
+                ':titulo'=>$titulo, ':descripcion'=>$descripcion,
+                ':url_imagen'=>$url_imagen, ':activo'=>$activo,
+                ':orden'=>$orden, ':id'=>$id_edit,
+            ]);
+            echo json_encode(['exito'=>true,'mensaje'=>'Imagen actualizada','url_imagen'=>$url_imagen]);
+            exit;
+        }
+
+        $id = insertarImagen($db, $titulo, $descripcion, $url_imagen, $activo, $orden);
+        echo json_encode(['exito'=>true,'mensaje'=>'Imagen creada','id'=>$id,'url_imagen'=>$url_imagen]);
+        exit;
 
     } else {
         $input       = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -122,65 +175,19 @@ if ($method === 'POST') {
             http_response_code(422);
             echo json_encode(['exito'=>false,'mensaje'=>'Título y URL son requeridos']); exit;
         }
-    }
 
-    $id = insertarImagen($db, $titulo, $descripcion ?? '', $url_imagen, $activo, $orden);
-    echo json_encode(['exito'=>true,'mensaje'=>'Imagen creada','id'=>$id,'url_imagen'=>$url_imagen]);
-    exit;
+        $id = insertarImagen($db, $titulo, $descripcion, $url_imagen, $activo, $orden);
+        echo json_encode(['exito'=>true,'mensaje'=>'Imagen creada','id'=>$id,'url_imagen'=>$url_imagen]);
+        exit;
+    }
 }
 
 if ($method === 'PUT') {
     header('Content-Type: application/json');
 
-    $esMultipart    = str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data');
-    $url_nueva      = null;
-    $input          = [];
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $id    = intval($input['id'] ?? 0);
 
-    if ($esMultipart) {
-        preg_match('/boundary=(.*)$/', $_SERVER['CONTENT_TYPE'], $bm);
-        $boundary = trim($bm[1] ?? '');
-        $raw      = file_get_contents('php://input');
-        $parts    = array_slice(explode('--' . $boundary, $raw), 1, -1);
-        $fileData = null;
-
-        foreach ($parts as $part) {
-            [$rawHeaders, $body] = array_pad(explode("\r\n\r\n", $part, 2), 2, '');
-            $body = substr($body, 0, -2);
-            preg_match('/name="([^"]+)"/', $rawHeaders, $nm);
-            $name = $nm[1] ?? '';
-
-            if (str_contains($rawHeaders, 'filename=')) {
-                preg_match('/filename="([^"]*)"/', $rawHeaders, $fn);
-                if (!empty($fn[1]) && !empty($body)) {
-                    $tmp = tempnam(sys_get_temp_dir(), 'put_');
-                    file_put_contents($tmp, $body);
-                    $fileData = ['tmp_name'=>$tmp,'_raw'=>$body,
-                                 'error'=>UPLOAD_ERR_OK,'size'=>strlen($body)];
-                }
-            } else {
-                $input[$name] = $body;
-            }
-        }
-
-        if ($fileData) {
-            try {
-                $url_nueva = procesarArchivo($fileData, $TIPOS_PERMITIDOS, $TAMANO_MAX);
-                $input['url_imagen'] = $url_nueva;
-            } catch (RuntimeException $e) {
-                http_response_code(422);
-                echo json_encode(['exito'=>false,'mensaje'=>$e->getMessage()]); exit;
-            } finally {
-                if (!empty($fileData['tmp_name']) && file_exists($fileData['tmp_name'])) {
-                    @unlink($fileData['tmp_name']);
-                }
-            }
-        }
-
-    } else {
-        $input = json_decode(file_get_contents('php://input'), true) ?? [];
-    }
-
-    $id = intval($input['id'] ?? 0);
     if (!$id) {
         http_response_code(422);
         echo json_encode(['exito'=>false,'mensaje'=>'ID requerido']); exit;
@@ -203,12 +210,13 @@ if ($method === 'PUT') {
     $db->prepare("UPDATE imagenes SET " . implode(', ', $sets) . " WHERE id = :id")
        ->execute($params);
 
-    echo json_encode(['exito'=>true,'mensaje'=>'Imagen actualizada','url_imagen'=>$url_nueva]);
+    echo json_encode(['exito'=>true,'mensaje'=>'Imagen actualizada']);
     exit;
 }
 
 if ($method === 'DELETE') {
     header('Content-Type: application/json');
+
     $id = intval($_GET['id'] ?? 0);
     if (!$id) {
         $input = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -218,8 +226,22 @@ if ($method === 'DELETE') {
         http_response_code(422);
         echo json_encode(['exito'=>false,'mensaje'=>'ID requerido']); exit;
     }
-    $db->prepare("UPDATE imagenes SET activo = 0 WHERE id = :id")->execute([':id'=>$id]);
-    echo json_encode(['exito'=>true,'mensaje'=>'Imagen eliminada']);
+
+    $stSel = $db->prepare("SELECT url_imagen FROM imagenes WHERE id = :id");
+    $stSel->execute([':id' => $id]);
+    $fila  = $stSel->fetch();
+
+    $stDel = $db->prepare("DELETE FROM imagenes WHERE id = :id");
+    $stDel->execute([':id' => $id]);
+
+    if ($stDel->rowCount() === 0) {
+        http_response_code(404);
+        echo json_encode(['exito'=>false,'mensaje'=>'Imagen no encontrada']); exit;
+    }
+
+    if ($fila) borrarArchivoLocal($fila['url_imagen']);
+
+    echo json_encode(['exito'=>true,'mensaje'=>'Imagen eliminada correctamente']);
     exit;
 }
 
