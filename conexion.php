@@ -5,7 +5,7 @@ define('DB_HOST', 'localhost');
 define('DB_PORT', DB_DRIVER === 'pgsql' ? '5432' : '3306');
 define('DB_USER', 'mguadarrama');
 define('DB_PASS', '16052004');
-define('DB_NAME', 'mguadarrama');
+define('DB_NAME', 'mguadarrama_db');
 
 class DB {
 

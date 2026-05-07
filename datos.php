@@ -4,8 +4,8 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-define('UPLOAD_DIR', __DIR__ . 'img' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR);
-define('UPLOAD_URL', 'img/uploads/');
+define('UPLOAD_DIR', __DIR__ . 'img');
+define('UPLOAD_URL', 'img/');
 
 if (!is_dir(UPLOAD_DIR)) {
     mkdir(UPLOAD_DIR, 0755, true);
