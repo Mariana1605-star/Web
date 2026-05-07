@@ -309,6 +309,7 @@ async function guardarImagen() {
 
         if (usaArchivo) {
             const fd = new FormData();
+            if (esEditar) fd.append('_method', 'PUT');
             if (id) fd.append('id', id);
             fd.append('titulo',      titulo);
             fd.append('descripcion', descripcion);
@@ -316,7 +317,7 @@ async function guardarImagen() {
             fd.append('activo',      activo);
             fd.append('archivo',     archivo);
 
-            res  = await fetch('datos.php', { method: esEditar ? 'PUT' : 'POST', body: fd });
+            res  = await fetch('datos.php', { method: 'POST', body: fd });
             data = await res.json();
 
         } else {
