@@ -25,61 +25,117 @@ function adminNotif(msg, tipo = 'success') {
     el._t = setTimeout(() => { el.style.display = 'none'; }, 3500);
 }
 
-let imagenesCache = [];
+
+let imagenesCache  = [];  
+let indiceActual   = 0; 
+
+function mostrarImagen(id) {
+    console.log('Cambiando imagen al ID: ' + id);
+
+    const container = $('#slide-container');
+
+    container.html(
+        '<div class="text-center p-5">' +
+        '<div class="spinner-border text-light" role="status"></div>' +
+        '<p class="mt-2 text-white-50 small">Cargando...</p>' +
+        '</div>'
+    );
+
+    $.ajax({
+        url:     'generar_visor.php',
+        data:    { id: id },
+        cache:   false,
+        success: function (result) {
+            container.html(result);
+
+            const url = new URL(window.location.href);
+            url.searchParams.set('imagen', id);
+            window.history.pushState({ imagenId: id }, '', url.toString());
+
+            if (window._visorData && window._visorData[id]) {
+                actualizarInfoImagen(window._visorData[id]);
+            }
+        },
+        error: function () {
+            container.html(
+                '<p class="text-danger text-center p-4">Error al cargar el componente de imagen.</p>'
+            );
+        }
+    });
+}
+
+function irAnterior() {
+    if (!imagenesCache.length) return;
+    indiceActual = (indiceActual - 1 + imagenesCache.length) % imagenesCache.length;
+    const img    = imagenesCache[indiceActual];
+    resaltarIndicador(indiceActual);
+    mostrarImagen(img.id);
+}
+
+function irSiguiente() {
+    if (!imagenesCache.length) return;
+    indiceActual = (indiceActual + 1) % imagenesCache.length;
+    const img    = imagenesCache[indiceActual];
+    resaltarIndicador(indiceActual);
+    mostrarImagen(img.id);
+}
+
+function irAIndice(idx) {
+    if (idx < 0 || idx >= imagenesCache.length) return;
+    indiceActual = idx;
+    resaltarIndicador(idx);
+    mostrarImagen(imagenesCache[idx].id);
+}
+
+function renderIndicadores(imagenes) {
+    const wrap = document.getElementById('carouselIndicadores');
+    if (!wrap) return;
+    wrap.innerHTML = imagenes.map((img, i) => `
+        <button class="carousel-dot ${i === indiceActual ? 'carousel-dot--active' : ''}"
+                data-idx="${i}"
+                aria-label="Imagen ${i + 1}: ${escHtml(img.titulo)}">
+        </button>
+    `).join('');
+
+    wrap.querySelectorAll('.carousel-dot').forEach(btn =>
+        btn.addEventListener('click', () => irAIndice(parseInt(btn.dataset.idx)))
+    );
+}
+
+function resaltarIndicador(idx) {
+    document.querySelectorAll('.carousel-dot').forEach((btn, i) =>
+        btn.classList.toggle('carousel-dot--active', i === idx)
+    );
+}
 
 async function cargarCarrusel() {
-    const container = document.getElementById('carouselItems');
+    const container = document.getElementById('slide-container');
     if (!container) return;
+
     try {
         const res      = await fetch('datos.php');
         if (!res.ok)   throw new Error();
         const imagenes = await res.json();
         imagenesCache  = imagenes;
+
         if (!imagenes.length) {
-            container.innerHTML = '<div class="carousel-item active"><div class="p-5 text-center text-white">No hay imágenes disponibles.</div></div>';
+            container.innerHTML =
+                '<div class="p-5 text-center text-white">No hay imágenes disponibles.</div>';
             return;
         }
-        renderCarrusel(imagenes);
+
+        const params  = new URLSearchParams(window.location.search);
+        const idParam = parseInt(params.get('imagen')) || 0;
+        const idxUrl  = imagenes.findIndex(img => img.id === idParam);
+        indiceActual  = idxUrl >= 0 ? idxUrl : 0;
+
+        renderIndicadores(imagenes);
+        mostrarImagen(imagenes[indiceActual].id);
+
     } catch {
-        container.innerHTML = '<div class="carousel-item active"><div class="p-4 text-center text-danger">Error al cargar las imágenes.</div></div>';
+        container.innerHTML =
+            '<div class="p-4 text-center text-danger">Error al cargar las imágenes.</div>';
     }
-}
-
-function renderCarrusel(imagenes) {
-    const container = document.getElementById('carouselItems');
-    if (!container) return;
-
-    container.innerHTML = imagenes.map((img, i) => `
-        <div class="carousel-item ${i === 0 ? 'active' : ''}"
-             data-titulo="${escHtml(img.titulo)}"
-             data-descripcion="${escHtml(img.descripcion || '')}">
-            <img src="${escHtml(img.url_imagen)}"
-                 alt="${escHtml(img.titulo)}"
-                 class="d-block w-100"
-                 onerror="this.src='https://placehold.co/800x380/1e293b/fff?text=${encodeURIComponent(img.titulo)}'">
-            <div class="carousel-caption d-none d-sm-block">
-                <h5 class="mb-0">${escHtml(img.titulo)}</h5>
-            </div>
-        </div>
-    `).join('');
-
-    actualizarInfoImagen(imagenes[0]);
-
-    const carouselEl = document.getElementById('mainCarousel');
-    const clone      = carouselEl.cloneNode(true);
-    carouselEl.replaceWith(clone);
-
-    clone.addEventListener('slide.bs.carousel', (event) => {
-        const slide = clone.querySelectorAll('.carousel-item')[event.to];
-        if (!slide) return;
-        actualizarInfoImagen({ titulo: slide.dataset.titulo, descripcion: slide.dataset.descripcion });
-
-        $.ajax({
-            url: 'datos.php', type: 'GET', dataType: 'json',
-            success: (data) => { imagenesCache = data; },
-            error:   ()     => console.warn('AJAX: no se pudo recargar datos.php'),
-        });
-    });
 }
 
 function actualizarInfoImagen({ titulo, descripcion }) {
@@ -121,26 +177,19 @@ async function cargarTablaImagenes() {
                     </span>
                 </td>
                 <td class="text-center acciones-cell">
-
-                    <!-- Editar -->
                     <button class="btn-icon btn-edit" data-id="${img.id}" title="Editar">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                             <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                         </svg>
                     </button>
-
-                    <!-- Toggle activo/inactivo – 1 clic -->
                     <button class="btn-icon btn-toggle ${activo ? 'btn-toggle--on' : 'btn-toggle--off'}"
-                            data-id="${img.id}"
-                            title="${activo ? 'Desactivar' : 'Activar'}">
+                            data-id="${img.id}" title="${activo ? 'Desactivar' : 'Activar'}">
                         ${activo
                             ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
                             : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
                         }
                     </button>
-
-                    <!-- Eliminar – 1 clic, acción inmediata -->
                     <button class="btn-icon btn-delete" data-id="${img.id}" title="Eliminar">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"/>
@@ -149,7 +198,6 @@ async function cargarTablaImagenes() {
                             <path d="M9 6V4h6v2"/>
                         </svg>
                     </button>
-
                 </td>
             </tr>`;
         }).join('');
@@ -312,8 +360,8 @@ function bindDropZone() {
     const input = document.getElementById('editArchivo');
     if (!zone || !input) return;
 
-    zone.addEventListener('click',   () => input.click());
-    zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); });
+    zone.addEventListener('click',    () => input.click());
+    zone.addEventListener('keydown',  (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); });
     zone.addEventListener('dragover',  (e) => { e.preventDefault(); zone.classList.add('dragover'); });
     zone.addEventListener('dragleave', ()  => zone.classList.remove('dragover'));
     zone.addEventListener('drop', (e) => {
@@ -489,6 +537,17 @@ document.addEventListener('DOMContentLoaded', () => {
     cargarCarrusel();
     cargarTablaImagenes();
     bindDropZone();
+
+    document.getElementById('btnPrev')?.addEventListener('click', irAnterior);
+    document.getElementById('btnNext')?.addEventListener('click', irSiguiente);
+
+    window.addEventListener('popstate', (e) => {
+        if (e.state?.imagenId) {
+            const idx = imagenesCache.findIndex(img => img.id === e.state.imagenId);
+            if (idx >= 0) { indiceActual = idx; resaltarIndicador(idx); }
+            mostrarImagen(e.state.imagenId);
+        }
+    });
 
     document.getElementById('btnNuevaImagen')?.addEventListener('click', () => abrirModal('nuevo'));
     document.getElementById('btnCerrarModal')?.addEventListener('click', cerrarModal);
