@@ -1,40 +1,40 @@
 'use strict';
 
-function mostrarError(id, msg) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent   = msg;
-    el.style.display = 'block';
-}
-function ocultarError(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-}
-function escHtml(s) {
-    return String(s ?? '')
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function adminNotif(msg, tipo = 'success') {
-    const el = document.getElementById('adminNotif');
-    if (!el) return;
-    el.textContent   = msg;
-    el.className     = `admin-notif admin-notif--${tipo}`;
-    el.style.display = 'block';
-    clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.display = 'none'; }, 3500);
-}
+let listaIds     = [];
+let currentIndex = 0; 
 
+async function cargarSlider() {
+    try {
+        const res = await fetch('slider.php');
+        listaIds  = await res.json();
 
-let imagenesCache  = [];  
-let indiceActual   = 0; 
+        if (!listaIds || listaIds.length === 0) {
+            document.getElementById('slide-container').innerHTML =
+                '<p class="text-center text-white p-5">No hay imágenes disponibles.</p>';
+            document.getElementById('carouselIndicadores').innerHTML = '';
+            return;
+        }
+
+        const params  = new URLSearchParams(window.location.search);
+        const idParam = parseInt(params.get('imagen')) || 0;
+        const idxUrl  = listaIds.findIndex(img => img.id === idParam);
+        currentIndex  = idxUrl >= 0 ? idxUrl : 0;
+
+        renderIndicadores();
+
+        mostrarImagen(listaIds[currentIndex].id);
+
+    } catch (error) {
+        console.error('Error al cargar IDs:', error);
+        document.getElementById('slide-container').innerHTML =
+            '<p class="text-center text-danger p-5">Error al cargar el slider.</p>';
+    }
+}
 
 function mostrarImagen(id) {
     console.log('Cambiando imagen al ID: ' + id);
 
-    const container = $('#slide-container');
-
-    container.html(
+    $('#slide-container').html(
         '<div class="text-center p-5">' +
         '<div class="spinner-border text-light" role="status"></div>' +
         '<p class="mt-2 text-white-50 small">Cargando...</p>' +
@@ -42,11 +42,11 @@ function mostrarImagen(id) {
     );
 
     $.ajax({
-        url:     'generar_visor.php',
-        data:    { id: id },
-        cache:   false,
+        url:   'generar_visor.php',
+        data:  { id: id },
+        cache: false,
         success: function (result) {
-            container.html(result);
+            $('#slide-container').html(result);
 
             const url = new URL(window.location.href);
             url.searchParams.set('imagen', id);
@@ -55,43 +55,44 @@ function mostrarImagen(id) {
             if (window._visorData && window._visorData[id]) {
                 actualizarInfoImagen(window._visorData[id]);
             }
+
+            resaltarIndicador(currentIndex);
         },
         error: function () {
-            container.html(
+            $('#slide-container').html(
                 '<p class="text-danger text-center p-4">Error al cargar el componente de imagen.</p>'
             );
         }
     });
 }
 
-function irAnterior() {
-    if (!imagenesCache.length) return;
-    indiceActual = (indiceActual - 1 + imagenesCache.length) % imagenesCache.length;
-    const img    = imagenesCache[indiceActual];
-    resaltarIndicador(indiceActual);
-    mostrarImagen(img.id);
+function nextSlide() {
+    if (listaIds.length === 0) return;
+    currentIndex = (currentIndex + 1) % listaIds.length;
+    resaltarIndicador(currentIndex);
+    mostrarImagen(listaIds[currentIndex].id);
 }
 
-function irSiguiente() {
-    if (!imagenesCache.length) return;
-    indiceActual = (indiceActual + 1) % imagenesCache.length;
-    const img    = imagenesCache[indiceActual];
-    resaltarIndicador(indiceActual);
-    mostrarImagen(img.id);
+function prevSlide() {
+    if (listaIds.length === 0) return;
+    currentIndex = (currentIndex - 1 + listaIds.length) % listaIds.length;
+    resaltarIndicador(currentIndex);
+    mostrarImagen(listaIds[currentIndex].id);
 }
 
 function irAIndice(idx) {
-    if (idx < 0 || idx >= imagenesCache.length) return;
-    indiceActual = idx;
+    if (idx < 0 || idx >= listaIds.length) return;
+    currentIndex = idx;
     resaltarIndicador(idx);
-    mostrarImagen(imagenesCache[idx].id);
+    mostrarImagen(listaIds[idx].id);
 }
 
-function renderIndicadores(imagenes) {
+function renderIndicadores() {
     const wrap = document.getElementById('carouselIndicadores');
     if (!wrap) return;
-    wrap.innerHTML = imagenes.map((img, i) => `
-        <button class="carousel-dot ${i === indiceActual ? 'carousel-dot--active' : ''}"
+
+    wrap.innerHTML = listaIds.map((img, i) => `
+        <button class="carousel-dot ${i === currentIndex ? 'carousel-dot--active' : ''}"
                 data-idx="${i}"
                 aria-label="Imagen ${i + 1}: ${escHtml(img.titulo)}">
         </button>
@@ -108,36 +109,6 @@ function resaltarIndicador(idx) {
     );
 }
 
-async function cargarCarrusel() {
-    const container = document.getElementById('slide-container');
-    if (!container) return;
-
-    try {
-        const res      = await fetch('datos.php');
-        if (!res.ok)   throw new Error();
-        const imagenes = await res.json();
-        imagenesCache  = imagenes;
-
-        if (!imagenes.length) {
-            container.innerHTML =
-                '<div class="p-5 text-center text-white">No hay imágenes disponibles.</div>';
-            return;
-        }
-
-        const params  = new URLSearchParams(window.location.search);
-        const idParam = parseInt(params.get('imagen')) || 0;
-        const idxUrl  = imagenes.findIndex(img => img.id === idParam);
-        indiceActual  = idxUrl >= 0 ? idxUrl : 0;
-
-        renderIndicadores(imagenes);
-        mostrarImagen(imagenes[indiceActual].id);
-
-    } catch {
-        container.innerHTML =
-            '<div class="p-4 text-center text-danger">Error al cargar las imágenes.</div>';
-    }
-}
-
 function actualizarInfoImagen({ titulo, descripcion }) {
     const box = document.getElementById('infoImagen');
     if (!box) return;
@@ -145,6 +116,8 @@ function actualizarInfoImagen({ titulo, descripcion }) {
     document.getElementById('imgDescripcion').textContent = descripcion || '';
     box.style.display = 'block';
 }
+
+let imagenesCache = [];
 
 async function cargarTablaImagenes() {
     const tbody = document.getElementById('tablaImagenes');
@@ -223,14 +196,11 @@ async function cargarTablaImagenes() {
 async function toggleActivo(id, btn) {
     if (!id || btn.disabled) return;
     btn.disabled = true;
-
     try {
         const res  = await fetch(`datos.php?toggle=1&id=${id}`);
         const data = await res.json();
-
         if (data.exito) {
-            const activo = data.activo == 1;
-
+            const activo  = data.activo == 1;
             btn.title     = activo ? 'Desactivar' : 'Activar';
             btn.className = `btn-icon btn-toggle ${activo ? 'btn-toggle--on' : 'btn-toggle--off'}`;
             btn.innerHTML = activo
@@ -243,19 +213,17 @@ async function toggleActivo(id, btn) {
                 badge.textContent = activo ? 'Activo' : 'Inactivo';
                 badge.className   = `badge-estado ${activo ? 'badge-activo' : 'badge-inactivo'}`;
             }
-
             const cached = imagenesCache.find(i => i.id == id);
             if (cached) cached.activo = data.activo;
 
             adminNotif(data.mensaje, 'success');
-            cargarCarrusel();
+            await cargarSlider();   // refresca el slider
         } else {
             adminNotif(data.mensaje || 'Error al cambiar estado.', 'error');
         }
     } catch {
         adminNotif('Error de red.', 'error');
     }
-
     btn.disabled = false;
 }
 
@@ -267,7 +235,7 @@ async function eliminarImagen(id) {
         if (data.exito) {
             adminNotif('Imagen eliminada correctamente.', 'success');
             await cargarTablaImagenes();
-            await cargarCarrusel();
+            await cargarSlider();   // refresca el slider igual que el docente
         } else {
             adminNotif(data.mensaje || 'Error al eliminar.', 'error');
         }
@@ -457,7 +425,7 @@ async function guardarImagen() {
             cerrarModal();
             adminNotif(esEditar ? 'Imagen actualizada.' : 'Imagen creada correctamente.', 'success');
             await cargarTablaImagenes();
-            await cargarCarrusel();
+            await cargarSlider();   // igual que subirImagen() del docente
         } else {
             adminNotif(data.mensaje || 'Error al guardar.', 'error');
         }
@@ -531,23 +499,49 @@ function initRegistro() {
     });
 }
 
+function mostrarError(id, msg) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = 'block';
+}
+function ocultarError(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
+function escHtml(s) {
+    return String(s ?? '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function adminNotif(msg, tipo = 'success') {
+    const el = document.getElementById('adminNotif');
+    if (!el) return;
+    el.textContent   = msg;
+    el.className     = `admin-notif admin-notif--${tipo}`;
+    el.style.display = 'block';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+
     initLogin();
     initRegistro();
-    cargarCarrusel();
-    cargarTablaImagenes();
-    bindDropZone();
-
-    document.getElementById('btnPrev')?.addEventListener('click', irAnterior);
-    document.getElementById('btnNext')?.addEventListener('click', irSiguiente);
+    cargarSlider();
+    document.getElementById('btnPrev')?.addEventListener('click', prevSlide);
+    document.getElementById('btnNext')?.addEventListener('click', nextSlide);
 
     window.addEventListener('popstate', (e) => {
         if (e.state?.imagenId) {
-            const idx = imagenesCache.findIndex(img => img.id === e.state.imagenId);
-            if (idx >= 0) { indiceActual = idx; resaltarIndicador(idx); }
+            const idx = listaIds.findIndex(img => img.id === e.state.imagenId);
+            if (idx >= 0) currentIndex = idx;
             mostrarImagen(e.state.imagenId);
         }
     });
+
+    cargarTablaImagenes();
+    bindDropZone();
 
     document.getElementById('btnNuevaImagen')?.addEventListener('click', () => abrirModal('nuevo'));
     document.getElementById('btnCerrarModal')?.addEventListener('click', cerrarModal);
@@ -556,13 +550,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === document.getElementById('formModal')) cerrarModal();
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarModal(); });
-
     document.getElementById('btnGuardarImagen')?.addEventListener('click', guardarImagen);
 
     document.querySelectorAll('.img-tab').forEach(btn =>
         btn.addEventListener('click', () => cambiarTab(btn.dataset.tab))
     );
-
     document.getElementById('editUrl')?.addEventListener('input', function () {
         mostrarPreviewUrl(this.value.trim());
     });
@@ -572,8 +564,9 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
             link.classList.add('active');
-            const id = 'sec' + link.dataset.section.charAt(0).toUpperCase() + link.dataset.section.slice(1);
-            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const secId = 'sec' + link.dataset.section.charAt(0).toUpperCase() + link.dataset.section.slice(1);
+            document.getElementById(secId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     });
+
 });
