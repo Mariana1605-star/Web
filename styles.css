@@ -286,3 +286,66 @@ body {
     padding: .2rem .6rem; text-align: center;
     letter-spacing: .5px; text-transform: uppercase;
 }
+
+#carouselWrapper {
+            position: relative;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            background: #1e293b;
+            min-height: 380px;
+        }
+        #slide-container {
+            min-height: 380px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #slide-container .visor-slide { width: 100%; position: relative; }
+
+        /* Flechas */
+        .carousel-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            background: rgba(0,0,0,.45);
+            border: none;
+            color: #fff;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background .2s, transform .15s;
+        }
+        .carousel-arrow:hover  { background: rgba(0,0,0,.72); }
+        .carousel-arrow:active { transform: translateY(-50%) scale(.93); }
+        #btnPrev { left:  14px; }
+        #btnNext { right: 14px; }
+
+        /* Indicadores (puntos) */
+        #carouselIndicadores {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 6px;
+            z-index: 10;
+        }
+        .carousel-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,.7);
+            background: transparent;
+            cursor: pointer;
+            padding: 0;
+            transition: background .2s, border-color .2s;
+        }
+        .carousel-dot--active {
+            background: #fff;
+            border-color: #fff;
+        }
