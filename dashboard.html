@@ -31,34 +31,42 @@
         <main class="col-12 col-lg-10 ps-lg-5">
             <h1 class="main-header-title text-center text-lg-start">Proyecto Primer Parcial</h1>
 
-            <section id="secCarrusel" class="mb-5">
-                <div id="carouselContainer" class="mb-4">
-                    <div id="mainCarousel" class="carousel slide" data-bs-ride="false">
-                        <div class="carousel-inner" id="carouselItems">
-                            <div class="carousel-item active">
-                                <div class="text-center p-5">
-                                    <div class="spinner-border text-primary" role="status">
-                                        <span class="visually-hidden">Cargando...</span>
-                                    </div>
-                                    <p class="mt-2 text-muted">Cargando imágenes...</p>
-                                </div>
-                            </div>
-                        </div>
-                        <button class="carousel-control-prev" type="button"
-                                data-bs-target="#mainCarousel" data-bs-slide="prev">
-                            <span class="carousel-control-prev-icon"></span>
-                        </button>
-                        <button class="carousel-control-next" type="button"
-                                data-bs-target="#mainCarousel" data-bs-slide="next">
-                            <span class="carousel-control-next-icon"></span>
-                        </button>
-                    </div>
-                </div>
-                <div id="infoImagen" class="card p-3 mt-2" style="display:none;">
-                    <h5 id="imgTitulo" class="mb-1"></h5>
-                    <p id="imgDescripcion" class="text-muted mb-0"></p>
-                </div>
-            </section>
+            
+<section id="secCarrusel" class="mb-5">
+
+    <!-- Contenedor de sustitución AJAX (sin Bootstrap Carousel) -->
+    <div class="card shadow-lg border-0 mb-3" style="border-radius: 15px; overflow: hidden;">
+
+        <div id="contenedor-ajax" style="
+            min-height: 380px;
+            background-color: #1e293b;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        ">
+            <div class="text-white p-5">Iniciando conexión con el servidor...</div>
+        </div>
+
+        <!-- Controles de navegación -->
+        <div class="d-flex justify-content-between align-items-center p-3 bg-white border-top">
+            <button class="btn btn-primary px-4" id="btn-prev">⬅️ Anterior</button>
+            <div class="text-center">
+                <span id="contador" class="badge bg-secondary mb-1">Cargando...</span>
+                <div id="nombre-foto" class="fw-bold d-block"></div>
+            </div>
+            <button class="btn btn-primary px-4" id="btn-next">Siguiente ➡️</button>
+        </div>
+    </div>
+
+    <!-- Panel de info (título + descripción) -->
+    <div id="infoImagen" class="card p-3 mt-2" style="display:none;">
+        <h5 id="imgTitulo" class="mb-1"></h5>
+        <p id="imgDescripcion" class="text-muted mb-0"></p>
+    </div>
+
+</section>
+
 
             <section id="secAdmin" class="mb-5">
                 <div class="admin-panel">

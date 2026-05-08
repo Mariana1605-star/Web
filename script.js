@@ -50,7 +50,6 @@ function toggleSidebar() {
 let listaIds     = [];
 let currentIndex = 0;
 
-// Carga la lista de IDs desde slider.php y monta el contenedor
 async function cargarSlider() {
     try {
         const res = await fetch('slider.php');
@@ -77,9 +76,6 @@ async function cargarSlider() {
     }
 }
 
-// AJAX a datos.php?id=X
-// Al inspeccionar el DOM veras: <img src="img/imagen1.jpg" ...>
-// El enlace <a href="visor.php?id=X"> permite abrirla en pagina aparte
 function mostrarImagen(id) {
     console.log('Cambiando imagen al ID: ' + id);
 
@@ -95,7 +91,7 @@ function mostrarImagen(id) {
                 return;
             }
 
-            var urlImagen = img.url_imagen; // ej: img/imagen1.jpg
+            var urlImagen = img.url_imagen;
 
             $('#slide-container').html(
                 '<a href="visor.php?id=' + img.id + '" target="_blank" title="Ver en pagina aparte">' +
@@ -105,7 +101,6 @@ function mostrarImagen(id) {
                 '</a>'
             );
 
-            // Panel de info debajo del slider
             $('#imgTitulo').text(img.titulo);
             $('#imgDescripcion').text(img.descripcion || '');
             $('#infoImagen').show();
@@ -119,21 +114,18 @@ function mostrarImagen(id) {
     });
 }
 
-// Flecha siguiente
 function nextSlide() {
     if (listaIds.length === 0) return;
     currentIndex = (currentIndex + 1) % listaIds.length;
     mostrarImagen(listaIds[currentIndex].id);
 }
 
-// Flecha anterior
 function prevSlide() {
     if (listaIds.length === 0) return;
     currentIndex = (currentIndex - 1 + listaIds.length) % listaIds.length;
     mostrarImagen(listaIds[currentIndex].id);
 }
 
-// Subir imagen via upload.php
 function subirImagen() {
     const fileInput = document.getElementById('file');
     const file      = fileInput ? fileInput.files[0] : null;
@@ -144,7 +136,7 @@ function subirImagen() {
     }
 
     const formData = new FormData();
-    formData.append('imagen', file); // coincide con $_FILES['imagen'] en PHP
+    formData.append('imagen', file);
 
     fetch('upload.php', { method: 'POST', body: formData })
         .then(response => {
@@ -167,101 +159,109 @@ function subirImagen() {
 }
 
 /* ============================================================
-   CARRUSEL BOOTSTRAP  (dashboard.html)
+   CARRUSEL — SUSTITUCIÓN DIRECTA DE NODO  (dashboard.html)
    ============================================================ */
 let imagenesCache = [];
+let indiceActual  = 0;
 
+// Carga el listado de imágenes activas y muestra la primera
 async function cargarCarrusel() {
-    const container = document.getElementById('carouselItems');
-    if (!container) return;
+    const contenedor = document.getElementById('contenedor-ajax');
+    if (!contenedor) return;
+
     try {
-        const res      = await fetch('datos.php');
-        if (!res.ok)   throw new Error();
+        const res = await fetch('datos.php');
+        if (!res.ok) throw new Error();
         const imagenes = await res.json();
         imagenesCache  = imagenes;
+
         if (!imagenes.length) {
-            container.innerHTML = '<div class="carousel-item active"><div class="p-5 text-center text-white">No hay imagenes disponibles.</div></div>';
+            contenedor.innerHTML = '<div class="text-white p-5">No hay imágenes disponibles.</div>';
+            const contador = document.getElementById('contador');
+            if (contador) contador.textContent = '0 fotos';
             return;
         }
-        renderCarrusel(imagenes);
+
+        const idx = indiceActual < imagenes.length ? indiceActual : 0;
+        sustituirNodo(idx);
+
     } catch {
-        container.innerHTML = '<div class="carousel-item active"><div class="p-4 text-center text-danger">Error al cargar las imagenes.</div></div>';
+        contenedor.innerHTML = '<div class="text-danger p-5">Error al cargar las imágenes.</div>';
     }
 }
 
-function renderCarrusel(imagenes) {
-    const container = document.getElementById('carouselItems');
-    if (!container) return;
+// SUSTITUCIÓN DIRECTA: vacía el contenedor e inyecta un nuevo <img> vía AJAX
+function sustituirNodo(index) {
+    const imagenes   = imagenesCache;
+    if (!imagenes.length) return;
 
-    // data-id en cada slide para que el AJAX sepa que ID consultar
-    container.innerHTML = imagenes.map((img, i) => `
-        <div class="carousel-item ${i === 0 ? 'active' : ''}"
-             data-id="${img.id}"
-             data-titulo="${escHtml(img.titulo)}"
-             data-descripcion="${escHtml(img.descripcion || '')}"
-             data-url="${escHtml(img.url_imagen)}">
-            <img src="${escHtml(img.url_imagen)}"
-                 alt="${escHtml(img.titulo)}"
-                 class="d-block w-100"
-                 onerror="this.src='https://placehold.co/800x380/1e293b/fff?text=${encodeURIComponent(img.titulo)}'">
-            <div class="carousel-caption d-none d-sm-block">
-                <h5 class="mb-0">${escHtml(img.titulo)}</h5>
-            </div>
-        </div>
-    `).join('');
+    indiceActual     = index;
+    const foto       = imagenes[index];
+    const contenedor = document.getElementById('contenedor-ajax');
+    if (!contenedor) return;
 
-    actualizarInfoImagen(imagenes[0]);
+    // PASO A — elimina el nodo anterior del DOM
+    contenedor.innerHTML = '';
 
-    const carouselEl = document.getElementById('mainCarousel');
-    const clone      = carouselEl.cloneNode(true);
-    carouselEl.replaceWith(clone);
+    // Actualiza contador y nombre de inmediato (sin esperar AJAX)
+    const contador   = document.getElementById('contador');
+    const nombreFoto = document.getElementById('nombre-foto');
+    if (contador)   contador.textContent   = `FOTO ${index + 1} DE ${imagenes.length}`;
+    if (nombreFoto) nombreFoto.textContent = foto.titulo;
 
-    // Al presionar flecha: AJAX a datos.php?id=X -> actualiza src + panel info
-    clone.addEventListener('slide.bs.carousel', (event) => {
-        const slides = clone.querySelectorAll('.carousel-item');
-        const slide  = slides[event.to];
-        if (!slide) return;
+    console.log('Cambiando imagen al ID: ' + foto.id);
 
-        const id = slide.dataset.id;
-        console.log('Cambiando imagen al ID: ' + id);
+    // PASO B — petición AJAX a datos.php?id=X
+    $.ajax({
+        url:      'datos.php',
+        type:     'GET',
+        data:     { id: foto.id },
+        dataType: 'json',
+        cache:    false,
+        success: function (img) {
+            if (!img || !img.url_imagen) {
+                contenedor.innerHTML = '<div class="text-white p-5">Imagen no encontrada.</div>';
+                return;
+            }
 
-        $.ajax({
-            url:      'datos.php',
-            type:     'GET',
-            data:     { id: id },
-            dataType: 'json',
-            cache:    false,
-            success: function (img) {
-                if (img && img.url_imagen) {
-                    // src actualizado en el DOM -> inspector muestra img/imagen2.jpg
-                    const imgEl = slide.querySelector('img');
-                    if (imgEl) {
-                        imgEl.src = img.url_imagen;
-                        imgEl.alt = img.titulo;
-                    }
-                    actualizarInfoImagen(img);
-                    console.log('URL cargada: ' + img.url_imagen);
-                } else {
-                    actualizarInfoImagen({
-                        titulo:      slide.dataset.titulo,
-                        descripcion: slide.dataset.descripcion,
-                        url_imagen:  slide.dataset.url,
-                    });
-                }
-            },
-            error: function () {
-                console.warn('AJAX: no se pudo cargar la imagen ID ' + id);
-                actualizarInfoImagen({
-                    titulo:      slide.dataset.titulo,
-                    descripcion: slide.dataset.descripcion,
-                    url_imagen:  slide.dataset.url,
-                });
-            },
-        });
+            // PASO C — inyecta el nuevo nodo con ID único (el inspector resalta el cambio)
+            const ts       = Date.now();
+            const fallback = encodeURIComponent(img.titulo);
+            contenedor.innerHTML =
+                `<img src="${escHtml(img.url_imagen)}"
+                      id="img-node-${ts}"
+                      alt="${escHtml(img.titulo)}"
+                      style="height:380px;width:100%;object-fit:cover;display:block;"
+                      onerror="this.src='https://placehold.co/800x380/1e293b/fff?text=${fallback}'">`;
+
+            actualizarInfoImagen(img);
+            console.log('URL cargada: ' + img.url_imagen);
+        },
+        error: function () {
+            console.warn('AJAX error al cargar ID: ' + foto.id);
+            // Fallback con datos del cache
+            const fallback = encodeURIComponent(foto.titulo);
+            contenedor.innerHTML =
+                `<img src="${escHtml(foto.url_imagen)}"
+                      style="height:380px;width:100%;object-fit:cover;display:block;"
+                      alt="${escHtml(foto.titulo)}"
+                      onerror="this.src='https://placehold.co/800x380/1e293b/fff?text=${fallback}'">`;
+            actualizarInfoImagen(foto);
+        }
     });
 }
 
-function actualizarInfoImagen({ titulo, descripcion, url_imagen } = {}) {
+function nextSlideAdmin() {
+    if (!imagenesCache.length) return;
+    sustituirNodo((indiceActual + 1) % imagenesCache.length);
+}
+
+function prevSlideAdmin() {
+    if (!imagenesCache.length) return;
+    sustituirNodo((indiceActual - 1 + imagenesCache.length) % imagenesCache.length);
+}
+
+function actualizarInfoImagen({ titulo, descripcion } = {}) {
     const box = document.getElementById('infoImagen');
     if (!box) return;
     document.getElementById('imgTitulo').textContent      = titulo      || '';
@@ -379,11 +379,10 @@ async function toggleActivo(id, btn) {
     btn.disabled = false;
 }
 
-// Eliminar imagen — detecta automaticamente si es slider simple o panel admin
 async function eliminarImagen(id) {
     if (!id) return;
 
-    // Slider simple: usa delete.php con POST + confirm
+    // Slider simple
     if (document.getElementById('slider')) {
         if (!confirm('Estas seguro de que deseas eliminar esta imagen?')) return;
         try {
@@ -404,7 +403,7 @@ async function eliminarImagen(id) {
         return;
     }
 
-    // Panel admin: usa datos.php con DELETE
+    // Panel admin
     try {
         const res  = await fetch(`datos.php?id=${id}`, { method: 'DELETE' });
         const data = await res.json();
@@ -705,10 +704,14 @@ document.addEventListener('DOMContentLoaded', () => {
         cargarSlider();
     }
 
-    // Dashboard: carrusel Bootstrap + tabla admin
+    // Dashboard: carrusel por sustitución de nodo + tabla admin
     cargarCarrusel();
     cargarTablaImagenes();
     bindDropZone();
+
+    // Botones del carrusel de sustitución
+    document.getElementById('btn-next')?.addEventListener('click', nextSlideAdmin);
+    document.getElementById('btn-prev')?.addEventListener('click', prevSlideAdmin);
 
     // Botones del modal
     document.getElementById('btnNuevaImagen')?.addEventListener('click', () => abrirModal('nuevo'));
