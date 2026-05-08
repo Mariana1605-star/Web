@@ -1,91 +1,77 @@
+let listaIds = [];
+let currentIndex = 0;
+let imagenesCache = [];
+let tabActiva = 'local';
+
 async function cargarSlider() {
     try {
         const res = await fetch('slider.php');
-        listaIds  = await res.json();
+        listaIds = await res.json();
 
         if (!listaIds || listaIds.length === 0) {
-            document.getElementById('slide-container').innerHTML =
-                '<p class="text-center text-white p-5">No hay imágenes disponibles.</p>';
+            document.getElementById('slide-container').innerHTML = '<p class="text-center text-white p-5">No hay imágenes disponibles.</p>';
             document.getElementById('carouselIndicadores').innerHTML = '';
             return;
         }
 
-        // Si la URL ya traía ?imagen=img_003 arrancamos en esa imagen
-        const params   = new URLSearchParams(window.location.search);
+        const params = new URLSearchParams(window.location.search);
         const slugParam = params.get('imagen') || '';
-        const idxUrl   = listaIds.findIndex(img => img.slug === slugParam);
-        currentIndex   = idxUrl >= 0 ? idxUrl : 0;
+        const idxUrl = listaIds.findIndex(img => img.slug === slugParam);
+        currentIndex = idxUrl >= 0 ? idxUrl : 0;
 
         renderIndicadores();
         mostrarImagen(currentIndex);
-
     } catch (error) {
-        console.error('Error al cargar slider:', error);
-        document.getElementById('slide-container').innerHTML =
-            '<p class="text-center text-danger p-5">Error al cargar el slider.</p>';
+        document.getElementById('slide-container').innerHTML = '<p class="text-center text-danger p-5">Error al cargar el slider.</p>';
     }
 }
 
-/* --- 1. Función para mostrar la imagen con AJAX y actualizar URL --- */
 function mostrarImagen(idx) {
     if (!listaIds || !listaIds[idx]) return;
 
     const item = listaIds[idx];
     const slugActual = item.slug;
 
-    // 1. ACTUALIZAR URL: dashboard.html?imagen=paisaje-1
     const nuevaUrl = window.location.pathname + '?imagen=' + slugActual;
     window.history.pushState({ idx: idx }, '', nuevaUrl);
 
-    // 2. PETICIÓN AJAX: Obtener el HTML de la imagen
     $.ajax({
         url: 'generar_visor.php',
         type: 'GET',
         data: { slug: slugActual },
         success: function(htmlResponse) {
-            // Inyectamos el HTML que ya trae las clases img-fluid y shadow
             $('#slide-container').html(htmlResponse);
-
-            // 3. ACTUALIZAR INFO: Usamos el ID "url" que pediste
             $('#imgTitulo').text(item.titulo);
-            // Si tu slider.php devuelve la descripción, la ponemos aquí
             $('#imgDescripcion').text(item.descripcion || 'Sin descripción disponible.');
-            
             resaltarIndicador(idx);
-        },
-        error: function() {
-            $('#slide-container').html('<p class="text-danger text-center">Error al cargar la imagen.</p>');
         }
     });
 }
 
-// Controladores para las flechas
-document.getElementById('btnNext').onclick = function() {
+function nextSlide() {
+    if (listaIds.length === 0) return;
     currentIndex = (currentIndex + 1) % listaIds.length;
     mostrarImagen(currentIndex);
-};
+}
 
-document.getElementById('btnPrev').onclick = function() {
+function prevSlide() {
+    if (listaIds.length === 0) return;
     currentIndex = (currentIndex - 1 + listaIds.length) % listaIds.length;
     mostrarImagen(currentIndex);
-};
+}
 
 function irAIndice(idx) {
     if (idx < 0 || idx >= listaIds.length) return;
     currentIndex = idx;
-    resaltarIndicador(idx);
     mostrarImagen(idx);
 }
-
-/* ── 4. Indicadores (puntos) ────────────────────────────────────────────── */
 
 function renderIndicadores() {
     const wrap = document.getElementById('carouselIndicadores');
     if (!wrap) return;
     wrap.innerHTML = listaIds.map((img, i) => `
         <button class="carousel-dot ${i === currentIndex ? 'carousel-dot--active' : ''}"
-                data-idx="${i}"
-                aria-label="${escHtml(img.slug)}">
+                data-idx="${i}" aria-label="${escHtml(img.slug)}">
         </button>
     `).join('');
     wrap.querySelectorAll('.carousel-dot').forEach(btn =>
@@ -99,27 +85,11 @@ function resaltarIndicador(idx) {
     );
 }
 
-/* ── 5. Tarjeta de info bajo el slider ──────────────────────────────────── */
-
-function actualizarInfoImagen({ titulo, descripcion }) {
-    const box = document.getElementById('infoImagen');
-    if (!box) return;
-    document.getElementById('imgTitulo').textContent      = titulo      || '';
-    document.getElementById('imgDescripcion').textContent = descripcion || '';
-    box.style.display = 'block';
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   TABLA DE ADMINISTRACIÓN
-════════════════════════════════════════════════════════════════════════════ */
-
-let imagenesCache = [];
-
 async function cargarTablaImagenes() {
     const tbody = document.getElementById('tablaImagenes');
     if (!tbody) return;
     try {
-        const res  = await fetch('datos.php?todas=1');
+        const res = await fetch('datos.php?todas=1');
         const data = await res.json();
         imagenesCache = data;
 
@@ -132,475 +102,182 @@ async function cargarTablaImagenes() {
             const activo = img.activo == 1;
             return `
             <tr data-id="${img.id}">
-                <td>
-                    <img src="${escHtml(img.url_imagen)}" class="admin-thumb"
-                         onerror="this.src='https://placehold.co/60x40/1e293b/fff?text=?'"
-                         alt="${escHtml(img.titulo)}">
-                </td>
+                <td><img src="${escHtml(img.url_imagen)}" class="admin-thumb" onerror="this.src='https://placehold.co/60x40/1e293b/fff?text=?'"></td>
                 <td class="fw-semibold">${escHtml(img.titulo)}</td>
                 <td class="text-muted small">${escHtml(img.descripcion || '—')}</td>
                 <td class="text-center">${img.orden}</td>
-                <td class="text-center">
-                    <span class="badge-estado ${activo ? 'badge-activo' : 'badge-inactivo'}">
-                        ${activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                </td>
+                <td class="text-center"><span class="badge-estado ${activo ? 'badge-activo' : 'badge-inactivo'}">${activo ? 'Activo' : 'Inactivo'}</span></td>
                 <td class="text-center acciones-cell">
-                    <button class="btn-icon btn-edit" data-id="${img.id}" title="Editar">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                        </svg>
-                    </button>
-                    <button class="btn-icon btn-toggle ${activo ? 'btn-toggle--on' : 'btn-toggle--off'}"
-                            data-id="${img.id}" title="${activo ? 'Desactivar' : 'Activar'}">
-                        ${activo
-                            ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
-                            : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
-                        }
-                    </button>
-                    <button class="btn-icon btn-delete" data-id="${img.id}" title="Eliminar">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-1 14H6L5 6"/>
-                            <path d="M10 11v6M14 11v6"/>
-                            <path d="M9 6V4h6v2"/>
-                        </svg>
-                    </button>
+                    <button class="btn-icon btn-edit" data-id="${img.id}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button class="btn-icon btn-toggle ${activo ? 'btn-toggle--on' : 'btn-toggle--off'}" data-id="${img.id}">${activo ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'}</button>
+                    <button class="btn-icon btn-delete" data-id="${img.id}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>
                 </td>
             </tr>`;
         }).join('');
 
-        document.querySelectorAll('.btn-edit').forEach(btn =>
-            btn.addEventListener('click', () => {
-                const img = imagenesCache.find(i => i.id == btn.dataset.id);
-                if (img) abrirModal('editar', img);
-            })
-        );
-        document.querySelectorAll('.btn-toggle').forEach(btn =>
-            btn.addEventListener('click', () => toggleActivo(parseInt(btn.dataset.id), btn))
-        );
-        document.querySelectorAll('.btn-delete').forEach(btn =>
-            btn.addEventListener('click', () => eliminarImagen(parseInt(btn.dataset.id)))
-        );
-
+        document.querySelectorAll('.btn-edit').forEach(btn => btn.onclick = () => abrirModal('editar', imagenesCache.find(i => i.id == btn.dataset.id)));
+        document.querySelectorAll('.btn-toggle').forEach(btn => btn.onclick = () => toggleActivo(parseInt(btn.dataset.id), btn));
+        document.querySelectorAll('.btn-delete').forEach(btn => btn.onclick = () => eliminarImagen(parseInt(btn.dataset.id)));
     } catch {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Error al cargar datos.</td></tr>';
     }
 }
 
-/* ── Toggle activo / inactivo ───────────────────────────────────────────── */
-
 async function toggleActivo(id, btn) {
     if (!id || btn.disabled) return;
     btn.disabled = true;
     try {
-        const res  = await fetch(`datos.php?toggle=1&id=${id}`);
+        const res = await fetch(`datos.php?toggle=1&id=${id}`);
         const data = await res.json();
         if (data.exito) {
-            const activo  = data.activo == 1;
-            btn.title     = activo ? 'Desactivar' : 'Activar';
-            btn.className = `btn-icon btn-toggle ${activo ? 'btn-toggle--on' : 'btn-toggle--off'}`;
-            btn.innerHTML = activo
-                ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
-                : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-
-            const fila  = btn.closest('tr');
-            const badge = fila?.querySelector('.badge-estado');
-            if (badge) {
-                badge.textContent = activo ? 'Activo' : 'Inactivo';
-                badge.className   = `badge-estado ${activo ? 'badge-activo' : 'badge-inactivo'}`;
-            }
-            const cached = imagenesCache.find(i => i.id == id);
-            if (cached) cached.activo = data.activo;
-
-            adminNotif(data.mensaje, 'success');
+            await cargarTablaImagenes();
             await cargarSlider();
-        } else {
-            adminNotif(data.mensaje || 'Error al cambiar estado.', 'error');
+            adminNotif(data.mensaje, 'success');
         }
-    } catch {
-        adminNotif('Error de red.', 'error');
-    }
+    } catch { adminNotif('Error de red.', 'error'); }
     btn.disabled = false;
 }
 
-/* ── Eliminar imagen ────────────────────────────────────────────────────── */
-
 async function eliminarImagen(id) {
-    if (!id) return;
-    if (!confirm('¿Estás seguro de que deseas eliminar esta imagen?')) return;
-
+    if (!id || !confirm('¿Eliminar esta imagen?')) return;
     try {
-        const res  = await fetch(`datos.php?id=${id}`, { method: 'DELETE' });
+        const res = await fetch(`datos.php?id=${id}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.exito) {
-            adminNotif('Imagen eliminada correctamente.', 'success');
             await cargarTablaImagenes();
             await cargarSlider();
-        } else {
-            adminNotif(data.mensaje || 'Error al eliminar.', 'error');
+            adminNotif('Eliminada.', 'success');
         }
-    } catch {
-        adminNotif('Error de red al eliminar.', 'error');
-    }
+    } catch { adminNotif('Error de red.', 'error'); }
 }
-
-/* ════════════════════════════════════════════════════════════════════════════
-   MODAL DE EDICIÓN / CREACIÓN
-════════════════════════════════════════════════════════════════════════════ */
-
-let tabActiva = 'local';
 
 function abrirModal(modo = 'nuevo', img = null) {
     const modal = document.getElementById('formModal');
     if (!modal) return;
-
-    document.getElementById('editId').value         = img?.id          ?? '';
-    document.getElementById('editTitulo').value      = img?.titulo      ?? '';
+    document.getElementById('editId').value = img?.id ?? '';
+    document.getElementById('editTitulo').value = img?.titulo ?? '';
     document.getElementById('editDescripcion').value = img?.descripcion ?? '';
-    document.getElementById('editOrden').value       = img?.orden       ?? 0;
-    document.getElementById('editActivo').checked    = img ? img.activo == 1 : true;
-    document.getElementById('editUrl').value         = '';
-    document.getElementById('editArchivo').value     = '';
-    ocultarPreview();
-    ocultarFileChosen();
-
-    document.getElementById('formModalTitle').textContent =
-        modo === 'editar' ? 'Editar imagen' : 'Nueva imagen';
-
-    if (img?.url_imagen) {
-        const esLocal = !img.url_imagen.startsWith('http');
-        if (esLocal) {
-            cambiarTab('local');
-            mostrarPreviewUrl(img.url_imagen);
-        } else {
-            cambiarTab('url');
-            document.getElementById('editUrl').value = img.url_imagen;
-            mostrarPreviewUrl(img.url_imagen);
-        }
-    } else {
-        cambiarTab('local');
-    }
-
+    document.getElementById('editOrden').value = img?.orden ?? 0;
+    document.getElementById('editActivo').checked = img ? img.activo == 1 : true;
+    cambiarTab('local');
     modal.style.display = 'flex';
-    setTimeout(() => document.getElementById('editTitulo')?.focus(), 60);
 }
 
 function cerrarModal() {
-    const modal = document.getElementById('formModal');
-    if (modal) modal.style.display = 'none';
-    const input = document.getElementById('editArchivo');
-    if (input) { input.value = ''; input._dragFile = null; }
-    ocultarFileChosen();
-    ocultarPreview();
+    document.getElementById('formModal').style.display = 'none';
 }
 
 function cambiarTab(tab) {
     tabActiva = tab;
-    document.querySelectorAll('.img-tab').forEach(btn =>
-        btn.classList.toggle('active', btn.dataset.tab === tab)
-    );
+    document.querySelectorAll('.img-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
     document.getElementById('tabLocal').style.display = tab === 'local' ? '' : 'none';
-    document.getElementById('tabUrl').style.display   = tab === 'url'   ? '' : 'none';
-    document.getElementById('editArchivo').value = '';
-    document.getElementById('editUrl').value     = '';
-    ocultarPreview();
-    ocultarFileChosen();
+    document.getElementById('tabUrl').style.display = tab === 'url' ? '' : 'none';
 }
-
-/* ── Previews ───────────────────────────────────────────────────────────── */
-
-function mostrarPreviewUrl(src) {
-    if (!src) { ocultarPreview(); return; }
-    const box = document.getElementById('previewBox');
-    const img = document.getElementById('previewImg');
-    img.onerror = () => ocultarPreview();
-    img.onload  = () => { img.onerror = null; };
-    img.src     = src;
-    box.style.display = 'block';
-}
-function mostrarPreviewArchivo(file) {
-    if (!file) { ocultarPreview(); return; }
-    const reader = new FileReader();
-    reader.onload = (e) => mostrarPreviewUrl(e.target.result);
-    reader.readAsDataURL(file);
-}
-function ocultarPreview() {
-    const box = document.getElementById('previewBox');
-    if (box) box.style.display = 'none';
-}
-
-/* ── Drop zone ──────────────────────────────────────────────────────────── */
-
-function bindDropZone() {
-    const zone  = document.getElementById('dropZone');
-    const input = document.getElementById('editArchivo');
-    if (!zone || !input) return;
-
-    zone.addEventListener('click',    () => input.click());
-    zone.addEventListener('keydown',  (e) => { if (e.key === 'Enter' || e.key === ' ') input.click(); });
-    zone.addEventListener('dragover',  (e) => { e.preventDefault(); zone.classList.add('dragover'); });
-    zone.addEventListener('dragleave', ()  => zone.classList.remove('dragover'));
-    zone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        zone.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        if (file) setArchivoSeleccionado(file, input);
-    });
-    input.addEventListener('change', () => {
-        if (input.files[0]) setArchivoSeleccionado(input.files[0], input);
-    });
-    document.getElementById('btnQuitarArchivo')?.addEventListener('click', () => {
-        input.value     = '';
-        input._dragFile = null;
-        ocultarFileChosen();
-        ocultarPreview();
-    });
-}
-
-function setArchivoSeleccionado(file, input) {
-    const div  = document.getElementById('fileChosen');
-    const span = document.getElementById('fileChosenName');
-    if (div && span) {
-        span.textContent  = `${file.name}  (${(file.size / 1024).toFixed(0)} KB)`;
-        div.style.display = 'flex';
-    }
-    mostrarPreviewArchivo(file);
-    if (input && !input.files[0]) input._dragFile = file;
-}
-
-function ocultarFileChosen() {
-    const div = document.getElementById('fileChosen');
-    if (div) div.style.display = 'none';
-}
-
-function getArchivoActivo() {
-    const input = document.getElementById('editArchivo');
-    if (!input) return null;
-    return input.files[0] || input._dragFile || null;
-}
-
-/* ── Guardar imagen (crear / editar) ────────────────────────────────────── */
 
 async function guardarImagen() {
-    const id          = document.getElementById('editId').value;
-    const titulo      = document.getElementById('editTitulo').value.trim();
-    const descripcion = document.getElementById('editDescripcion').value.trim();
-    const orden       = parseInt(document.getElementById('editOrden').value) || 0;
-    const activo      = document.getElementById('editActivo').checked ? 1 : 0;
-    const archivo     = getArchivoActivo();
-    const urlExterna  = document.getElementById('editUrl').value.trim();
-    const esEditar    = !!id;
+    const id = document.getElementById('editId').value;
+    const fd = new FormData();
+    if (id) fd.append('id', id);
+    fd.append('titulo', document.getElementById('editTitulo').value);
+    fd.append('descripcion', document.getElementById('editDescripcion').value);
+    fd.append('orden', document.getElementById('editOrden').value);
+    fd.append('activo', document.getElementById('editActivo').checked ? 1 : 0);
 
-    if (!titulo) { adminNotif('El título es requerido.', 'error'); return; }
-
-    const usaArchivo = tabActiva === 'local' && !!archivo;
-    const usaUrl     = tabActiva === 'url'   && !!urlExterna;
-
-    if (!esEditar && !usaArchivo && !usaUrl) {
-        adminNotif('Selecciona un archivo o ingresa una URL.', 'error');
-        return;
+    if (tabActiva === 'local') {
+        const file = document.getElementById('editArchivo').files[0];
+        if (file) fd.append('archivo', file);
+    } else {
+        fd.append('url_imagen', document.getElementById('editUrl').value);
     }
-
-    setBtnGuardarLoading(true);
 
     try {
-        let res, data;
-
-        if (usaArchivo) {
-            const fd = new FormData();
-            if (esEditar) fd.append('_method', 'PUT');
-            if (id)       fd.append('id',           id);
-            fd.append('titulo',      titulo);
-            fd.append('descripcion', descripcion);
-            fd.append('orden',       orden);
-            fd.append('activo',      activo);
-            fd.append('archivo',     archivo);
-
-            res  = await fetch('datos.php', { method: 'POST', body: fd });
-            data = await res.json();
-        } else {
-            const payload = { titulo, descripcion, orden, activo };
-            if (id)     payload.id        = parseInt(id);
-            if (usaUrl) payload.url_imagen = urlExterna;
-
-            res  = await fetch('datos.php', {
-                method:  esEditar ? 'PUT' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify(payload),
-            });
-            data = await res.json();
-        }
-
+        const res = await fetch('datos.php', { method: 'POST', body: fd });
+        const data = await res.json();
         if (data.exito) {
             cerrarModal();
-            adminNotif(esEditar ? 'Imagen actualizada.' : 'Imagen creada correctamente.', 'success');
             await cargarTablaImagenes();
             await cargarSlider();
-        } else {
-            adminNotif(data.mensaje || 'Error al guardar.', 'error');
+            adminNotif('Guardado.', 'success');
         }
-    } catch (err) {
-        console.error(err);
-        adminNotif('Error de red al guardar.', 'error');
-    }
-
-    setBtnGuardarLoading(false);
+    } catch { adminNotif('Error al guardar.', 'error'); }
 }
-
-function setBtnGuardarLoading(v) {
-    const btn = document.getElementById('btnGuardarImagen');
-    if (!btn) return;
-    btn.disabled = v;
-    document.getElementById('btnGuardarTxt').textContent       = v ? 'Guardando...' : 'Guardar';
-    document.getElementById('btnGuardarSpinner').style.display = v ? 'inline-block' : 'none';
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   LOGIN
-════════════════════════════════════════════════════════════════════════════ */
 
 function initLogin() {
     const form = document.getElementById('loginForm');
     if (!form) return;
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        ocultarError('loginError');
-        const email    = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value.trim();
-        if (!email || !password) { mostrarError('loginError', 'Completa todos los campos.'); return; }
-        const btn = document.getElementById('btnLogin');
-        btn.disabled = true; btn.textContent = 'Verificando...';
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
         try {
-            const res  = await fetch('login.php', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+            const res = await fetch('login.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
             });
             const data = await res.json();
-            if (data.exito) {
-                window.location.href = 'dashboard.html';
-            } else {
-                mostrarError('loginError', data.mensaje || 'Credenciales incorrectas');
-                btn.disabled = false; btn.textContent = 'Iniciar sesión';
-            }
-        } catch {
-            mostrarError('loginError', 'Error de red.');
-            btn.disabled = false; btn.textContent = 'Iniciar sesión';
-        }
+            if (data.exito) window.location.href = 'dashboard.html';
+            else adminNotif(data.mensaje, 'error');
+        } catch { adminNotif('Error de red', 'error'); }
     });
 }
-
-/* ════════════════════════════════════════════════════════════════════════════
-   REGISTRO
-════════════════════════════════════════════════════════════════════════════ */
 
 function initRegistro() {
     const form = document.getElementById('registerForm');
     if (!form) return;
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        ocultarError('registerError');
-        const nombre   = document.getElementById('regNombre').value.trim();
-        const email    = document.getElementById('regEmail').value.trim();
-        const password = document.getElementById('regPassword').value.trim();
-        if (!nombre || !email || !password) { mostrarError('registerError', 'Completa todos los campos.'); return; }
+        const nombre = document.getElementById('regNombre').value;
+        const email = document.getElementById('regEmail').value;
+        const password = document.getElementById('regPassword').value;
         try {
-            const res  = await fetch('registro.php', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nombre, email, password }),
+            const res = await fetch('registro.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre, email, password })
             });
             const data = await res.json();
-            if (data.exito) { form.reset(); window.location.href = 'login.html'; }
-            else mostrarError('registerError', data.mensaje || 'Error al registrar');
-        } catch {
-            mostrarError('registerError', 'Error de red.');
-        }
+            if (data.exito) window.location.href = 'login.html';
+            else adminNotif(data.mensaje, 'error');
+        } catch { adminNotif('Error de red', 'error'); }
     });
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   UTILIDADES
-════════════════════════════════════════════════════════════════════════════ */
-
-function mostrarError(id, msg) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent   = msg;
-    el.style.display = 'block';
-}
-function ocultarError(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-}
 function escHtml(s) {
-    return String(s ?? '')
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
 function adminNotif(msg, tipo = 'success') {
     const el = document.getElementById('adminNotif');
     if (!el) return;
-    el.textContent   = msg;
-    el.className     = `admin-notif admin-notif--${tipo}`;
+    el.textContent = msg;
+    el.className = `admin-notif admin-notif--${tipo}`;
     el.style.display = 'block';
-    clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.display = 'none'; }, 3500);
+    setTimeout(() => { el.style.display = 'none'; }, 3000);
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   DOMContentLoaded — punto de entrada
-════════════════════════════════════════════════════════════════════════════ */
-
 document.addEventListener('DOMContentLoaded', () => {
-
     initLogin();
     initRegistro();
-
-    // ── Carrusel ───────────────────────────────────────────────────────────
     cargarSlider();
+    cargarTablaImagenes();
 
     document.getElementById('btnPrev')?.addEventListener('click', prevSlide);
     document.getElementById('btnNext')?.addEventListener('click', nextSlide);
-
-    // Botón atrás/adelante del navegador
-    window.addEventListener('popstate', (e) => {
-        if (e.state?.imagenIdx !== undefined) {
-            currentIndex = e.state.imagenIdx;
-            resaltarIndicador(currentIndex);
-            mostrarImagen(currentIndex);
-        }
-    });
-
-    // ── Admin ──────────────────────────────────────────────────────────────
-    cargarTablaImagenes();
-    bindDropZone();
-
     document.getElementById('btnNuevaImagen')?.addEventListener('click', () => abrirModal('nuevo'));
     document.getElementById('btnCerrarModal')?.addEventListener('click', cerrarModal);
-    document.getElementById('btnCancelarForm')?.addEventListener('click', cerrarModal);
-    document.getElementById('formModal')?.addEventListener('click', (e) => {
-        if (e.target === document.getElementById('formModal')) cerrarModal();
-    });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarModal(); });
     document.getElementById('btnGuardarImagen')?.addEventListener('click', guardarImagen);
+
+    window.addEventListener('popstate', (e) => {
+        const params = new URLSearchParams(window.location.search);
+        const slug = params.get('imagen');
+        if (slug) {
+            const idx = listaIds.findIndex(img => img.slug === slug);
+            if (idx !== -1) { currentIndex = idx; mostrarImagen(idx); }
+        }
+    });
 
     document.querySelectorAll('.img-tab').forEach(btn =>
         btn.addEventListener('click', () => cambiarTab(btn.dataset.tab))
     );
-    document.getElementById('editUrl')?.addEventListener('input', function () {
-        mostrarPreviewUrl(this.value.trim());
-    });
-
-    // ── Navegación del sidebar ─────────────────────────────────────────────
-    document.querySelectorAll('.nav-link[data-section]').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-            link.classList.add('active');
-            const secId = 'sec' + link.dataset.section.charAt(0).toUpperCase() + link.dataset.section.slice(1);
-            document.getElementById(secId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    });
-
 });
