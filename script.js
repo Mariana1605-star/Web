@@ -1,8 +1,3 @@
-'use strict';
-
-let listaIds     = [];
-let currentIndex = 0; 
-
 async function cargarSlider() {
     try {
         const res = await fetch('slider.php');
@@ -15,25 +10,31 @@ async function cargarSlider() {
             return;
         }
 
-        const params  = new URLSearchParams(window.location.search);
-        const idParam = parseInt(params.get('imagen')) || 0;
-        const idxUrl  = listaIds.findIndex(img => img.id === idParam);
-        currentIndex  = idxUrl >= 0 ? idxUrl : 0;
+        // Si la URL ya traía ?imagen=img_003 arrancamos en esa imagen
+        const params   = new URLSearchParams(window.location.search);
+        const slugParam = params.get('imagen') || '';
+        const idxUrl   = listaIds.findIndex(img => img.slug === slugParam);
+        currentIndex   = idxUrl >= 0 ? idxUrl : 0;
 
         renderIndicadores();
-
-        mostrarImagen(listaIds[currentIndex].id);
+        mostrarImagen(currentIndex);
 
     } catch (error) {
-        console.error('Error al cargar IDs:', error);
+        console.error('Error al cargar slider:', error);
         document.getElementById('slide-container').innerHTML =
             '<p class="text-center text-danger p-5">Error al cargar el slider.</p>';
     }
 }
 
-function mostrarImagen(id) {
-    console.log('Cambiando imagen al ID: ' + id);
+/* ── 2. Función clave: igual que el ejemplo del docente ─────────────────── */
 
+function mostrarImagen(idx) {
+    if (!listaIds[idx]) return;
+
+    const item = listaIds[idx];
+    console.log('Cambiando imagen al ID: ' + item.id + ' | slug: ' + item.slug);
+
+    // Spinner mientras carga
     $('#slide-container').html(
         '<div class="text-center p-5">' +
         '<div class="spinner-border text-light" role="status"></div>' +
@@ -43,20 +44,24 @@ function mostrarImagen(id) {
 
     $.ajax({
         url:   'generar_visor.php',
-        data:  { id: id },
+        data:  { slug: item.slug },   // ← se pasa el slug, no el id
         cache: false,
         success: function (result) {
+            // Insertar el HTML del visor en el contenedor
             $('#slide-container').html(result);
 
+            // ── URL del navegador: ?imagen=img_001 ────────────────────────
             const url = new URL(window.location.href);
-            url.searchParams.set('imagen', id);
-            window.history.pushState({ imagenId: id }, '', url.toString());
+            url.searchParams.set('imagen', item.slug);
+            window.history.pushState({ imagenIdx: idx, slug: item.slug }, '', url.toString());
 
-            if (window._visorData && window._visorData[id]) {
-                actualizarInfoImagen(window._visorData[id]);
+            // ── Tarjeta de info ───────────────────────────────────────────
+            if (window._visorData && window._visorData[item.id]) {
+                actualizarInfoImagen(window._visorData[item.id]);
             }
 
-            resaltarIndicador(currentIndex);
+            // ── Punto indicador activo ────────────────────────────────────
+            resaltarIndicador(idx);
         },
         error: function () {
             $('#slide-container').html(
@@ -70,34 +75,34 @@ function nextSlide() {
     if (listaIds.length === 0) return;
     currentIndex = (currentIndex + 1) % listaIds.length;
     resaltarIndicador(currentIndex);
-    mostrarImagen(listaIds[currentIndex].id);
+    mostrarImagen(currentIndex);
 }
 
 function prevSlide() {
     if (listaIds.length === 0) return;
     currentIndex = (currentIndex - 1 + listaIds.length) % listaIds.length;
     resaltarIndicador(currentIndex);
-    mostrarImagen(listaIds[currentIndex].id);
+    mostrarImagen(currentIndex);
 }
 
 function irAIndice(idx) {
     if (idx < 0 || idx >= listaIds.length) return;
     currentIndex = idx;
     resaltarIndicador(idx);
-    mostrarImagen(listaIds[idx].id);
+    mostrarImagen(idx);
 }
+
+/* ── 4. Indicadores (puntos) ────────────────────────────────────────────── */
 
 function renderIndicadores() {
     const wrap = document.getElementById('carouselIndicadores');
     if (!wrap) return;
-
     wrap.innerHTML = listaIds.map((img, i) => `
         <button class="carousel-dot ${i === currentIndex ? 'carousel-dot--active' : ''}"
                 data-idx="${i}"
-                aria-label="Imagen ${i + 1}: ${escHtml(img.titulo)}">
+                aria-label="${escHtml(img.slug)}">
         </button>
     `).join('');
-
     wrap.querySelectorAll('.carousel-dot').forEach(btn =>
         btn.addEventListener('click', () => irAIndice(parseInt(btn.dataset.idx)))
     );
@@ -109,6 +114,8 @@ function resaltarIndicador(idx) {
     );
 }
 
+/* ── 5. Tarjeta de info bajo el slider ──────────────────────────────────── */
+
 function actualizarInfoImagen({ titulo, descripcion }) {
     const box = document.getElementById('infoImagen');
     if (!box) return;
@@ -116,6 +123,10 @@ function actualizarInfoImagen({ titulo, descripcion }) {
     document.getElementById('imgDescripcion').textContent = descripcion || '';
     box.style.display = 'block';
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TABLA DE ADMINISTRACIÓN
+════════════════════════════════════════════════════════════════════════════ */
 
 let imagenesCache = [];
 
@@ -193,6 +204,8 @@ async function cargarTablaImagenes() {
     }
 }
 
+/* ── Toggle activo / inactivo ───────────────────────────────────────────── */
+
 async function toggleActivo(id, btn) {
     if (!id || btn.disabled) return;
     btn.disabled = true;
@@ -217,7 +230,7 @@ async function toggleActivo(id, btn) {
             if (cached) cached.activo = data.activo;
 
             adminNotif(data.mensaje, 'success');
-            await cargarSlider();   // refresca el slider
+            await cargarSlider();
         } else {
             adminNotif(data.mensaje || 'Error al cambiar estado.', 'error');
         }
@@ -227,15 +240,19 @@ async function toggleActivo(id, btn) {
     btn.disabled = false;
 }
 
+/* ── Eliminar imagen ────────────────────────────────────────────────────── */
+
 async function eliminarImagen(id) {
     if (!id) return;
+    if (!confirm('¿Estás seguro de que deseas eliminar esta imagen?')) return;
+
     try {
         const res  = await fetch(`datos.php?id=${id}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.exito) {
             adminNotif('Imagen eliminada correctamente.', 'success');
             await cargarTablaImagenes();
-            await cargarSlider();   // refresca el slider igual que el docente
+            await cargarSlider();
         } else {
             adminNotif(data.mensaje || 'Error al eliminar.', 'error');
         }
@@ -243,6 +260,10 @@ async function eliminarImagen(id) {
         adminNotif('Error de red al eliminar.', 'error');
     }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   MODAL DE EDICIÓN / CREACIÓN
+════════════════════════════════════════════════════════════════════════════ */
 
 let tabActiva = 'local';
 
@@ -303,6 +324,8 @@ function cambiarTab(tab) {
     ocultarFileChosen();
 }
 
+/* ── Previews ───────────────────────────────────────────────────────────── */
+
 function mostrarPreviewUrl(src) {
     if (!src) { ocultarPreview(); return; }
     const box = document.getElementById('previewBox');
@@ -322,6 +345,8 @@ function ocultarPreview() {
     const box = document.getElementById('previewBox');
     if (box) box.style.display = 'none';
 }
+
+/* ── Drop zone ──────────────────────────────────────────────────────────── */
 
 function bindDropZone() {
     const zone  = document.getElementById('dropZone');
@@ -370,6 +395,8 @@ function getArchivoActivo() {
     if (!input) return null;
     return input.files[0] || input._dragFile || null;
 }
+
+/* ── Guardar imagen (crear / editar) ────────────────────────────────────── */
 
 async function guardarImagen() {
     const id          = document.getElementById('editId').value;
@@ -425,7 +452,7 @@ async function guardarImagen() {
             cerrarModal();
             adminNotif(esEditar ? 'Imagen actualizada.' : 'Imagen creada correctamente.', 'success');
             await cargarTablaImagenes();
-            await cargarSlider();   // igual que subirImagen() del docente
+            await cargarSlider();
         } else {
             adminNotif(data.mensaje || 'Error al guardar.', 'error');
         }
@@ -444,6 +471,10 @@ function setBtnGuardarLoading(v) {
     document.getElementById('btnGuardarTxt').textContent       = v ? 'Guardando...' : 'Guardar';
     document.getElementById('btnGuardarSpinner').style.display = v ? 'inline-block' : 'none';
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LOGIN
+════════════════════════════════════════════════════════════════════════════ */
 
 function initLogin() {
     const form = document.getElementById('loginForm');
@@ -475,6 +506,10 @@ function initLogin() {
     });
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   REGISTRO
+════════════════════════════════════════════════════════════════════════════ */
+
 function initRegistro() {
     const form = document.getElementById('registerForm');
     if (!form) return;
@@ -498,6 +533,10 @@ function initRegistro() {
         }
     });
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   UTILIDADES
+════════════════════════════════════════════════════════════════════════════ */
 
 function mostrarError(id, msg) {
     const el = document.getElementById(id);
@@ -524,22 +563,31 @@ function adminNotif(msg, tipo = 'success') {
     el._t = setTimeout(() => { el.style.display = 'none'; }, 3500);
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   DOMContentLoaded — punto de entrada
+════════════════════════════════════════════════════════════════════════════ */
+
 document.addEventListener('DOMContentLoaded', () => {
 
     initLogin();
     initRegistro();
+
+    // ── Carrusel ───────────────────────────────────────────────────────────
     cargarSlider();
+
     document.getElementById('btnPrev')?.addEventListener('click', prevSlide);
     document.getElementById('btnNext')?.addEventListener('click', nextSlide);
 
+    // Botón atrás/adelante del navegador
     window.addEventListener('popstate', (e) => {
-        if (e.state?.imagenId) {
-            const idx = listaIds.findIndex(img => img.id === e.state.imagenId);
-            if (idx >= 0) currentIndex = idx;
-            mostrarImagen(e.state.imagenId);
+        if (e.state?.imagenIdx !== undefined) {
+            currentIndex = e.state.imagenIdx;
+            resaltarIndicador(currentIndex);
+            mostrarImagen(currentIndex);
         }
     });
 
+    // ── Admin ──────────────────────────────────────────────────────────────
     cargarTablaImagenes();
     bindDropZone();
 
@@ -559,6 +607,7 @@ document.addEventListener('DOMContentLoaded', () => {
         mostrarPreviewUrl(this.value.trim());
     });
 
+    // ── Navegación del sidebar ─────────────────────────────────────────────
     document.querySelectorAll('.nav-link[data-section]').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
