@@ -53,8 +53,8 @@ function renderCarrusel(imagenes) {
         <div class="carousel-item ${i === 0 ? 'active' : ''}"
              data-id="${img.id}"
              data-titulo="${escHtml(img.titulo)}"
-             data-descripcion="${escHtml(img.descripcion || '')}">
-            <img src="${escHtml(img.url_imagen)}"
+data-descripcion="${escHtml(img.descripcion || '')}"
+data-url="${escHtml(img.url_imagen)}">
                  alt="${escHtml(img.titulo)}"
                  class="d-block w-100"
                  onerror="this.src='https://placehold.co/800x380/1e293b/fff?text=${encodeURIComponent(img.titulo)}'">
@@ -101,9 +101,10 @@ function renderCarrusel(imagenes) {
                 } else {
                     // Fallback: usar los datos del data-attribute del slide
                     actualizarInfoImagen({
-                        titulo:      slide.dataset.titulo,
-                        descripcion: slide.dataset.descripcion,
-                    });
+    titulo:      slide.dataset.titulo,
+    descripcion: slide.dataset.descripcion,
+    url_imagen:  slide.dataset.url,
+});
                 }
             },
             error: function() {
@@ -118,10 +119,11 @@ function renderCarrusel(imagenes) {
     });
 }
 
-function actualizarInfoImagen({ titulo, descripcion }) {
+function actualizarInfoImagen({ titulo, descripcion, url_imagen }) {
     const box = document.getElementById('infoImagen');
     if (!box) return;
-    document.getElementById('imgTitulo').textContent      = titulo      || '';
+    // Muestra la URL/ruta de la imagen en lugar del título
+    document.getElementById('imgTitulo').textContent      = url_imagen  || titulo || '';
     document.getElementById('imgDescripcion').textContent = descripcion || '';
     box.style.display = 'block';
 }
