@@ -18,6 +18,17 @@ if ($method === 'POST' && ($_POST['_method'] ?? '') === 'PUT') {
 
 if ($method === 'GET') {
 
+    // Obtener una imagen por su ID (para AJAX del carrusel)
+    if (isset($_GET['id']) && !isset($_GET['toggle'])) {
+        $id   = intval($_GET['id']);
+        $stmt = $db->prepare("SELECT id, titulo, descripcion, url_imagen, activo, orden FROM imagenes WHERE id = :id LIMIT 1");
+        $stmt->execute([':id' => $id]);
+        $row  = $stmt->fetch();
+        if (!$row) { http_response_code(404); echo json_encode(['exito'=>false,'mensaje'=>'No encontrada']); exit; }
+        echo json_encode($row);
+        exit;
+    }
+
     if (isset($_GET['toggle'], $_GET['id'])) {
         $id   = intval($_GET['id']);
         $stmt = $db->prepare("SELECT activo FROM imagenes WHERE id = :id LIMIT 1");
