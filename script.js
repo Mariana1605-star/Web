@@ -31,68 +31,44 @@ function mostrarImagen(idx) {
     if (!listaIds || !listaIds[idx]) return;
 
     const item = listaIds[idx];
-    // Usamos el slug si existe, de lo contrario usamos el ID como respaldo
-    const identificador = item.slug || item.id;
+    const slugActual = item.slug;
 
-    console.log('Cambiando a: ' + identificador);
+    // 1. ACTUALIZAR URL: dashboard.html?imagen=paisaje-1
+    const nuevaUrl = window.location.pathname + '?imagen=' + slugActual;
+    window.history.pushState({ idx: idx }, '', nuevaUrl);
 
-    // Spinner de carga
-    $('#slide-container').html(
-        '<div class="text-center p-5">' +
-        '<div class="spinner-border text-light" role="status"></div>' +
-        '<p class="mt-2 text-white-50 small">Cargando imagen...</p>' +
-        '</div>'
-    );
-
+    // 2. PETICIÓN AJAX: Obtener el HTML de la imagen
     $.ajax({
         url: 'generar_visor.php',
         type: 'GET',
-        data: { slug: identificador }, // Enviamos el identificador al servidor
-        cache: false,
-        success: function (result) {
-            // 1. Insertar el HTML recibido por AJAX
-            $('#slide-container').html(result);
+        data: { slug: slugActual },
+        success: function(htmlResponse) {
+            // Inyectamos el HTML que ya trae las clases img-fluid y shadow
+            $('#slide-container').html(htmlResponse);
 
-            // 2. ACTUALIZAR URL: Cambia la barra de direcciones
-            const url = new URL(window.location.href);
-            url.searchParams.set('imagen', identificador);
-            window.history.pushState({ imagenIdx: idx, slug: identificador }, '', url.toString());
-
-            // 3. Actualizar la tarjeta de información inferior
-            // Si el backend devuelve los datos en un objeto global window._visorData
-            if (window._visorData && window._visorData[item.id]) {
-                actualizarInfoImagen(window._visorData[item.id]);
-            } else {
-                // Si no, usamos los datos que ya tenemos en listaIds
-                actualizarInfoImagen({
-                    titulo: item.titulo,
-                    descripcion: item.descripcion
-                });
-            }
-
-            // 4. Actualizar puntitos (indicadores)
+            // 3. ACTUALIZAR INFO: Usamos el ID "url" que pediste
+            $('#imgTitulo').text(item.titulo);
+            // Si tu slider.php devuelve la descripción, la ponemos aquí
+            $('#imgDescripcion').text(item.descripcion || 'Sin descripción disponible.');
+            
             resaltarIndicador(idx);
         },
-        error: function () {
-            $('#slide-container').html(
-                '<p class="text-danger text-center p-4">Error al cargar la imagen mediante AJAX.</p>'
-            );
+        error: function() {
+            $('#slide-container').html('<p class="text-danger text-center">Error al cargar la imagen.</p>');
         }
     });
 }
 
-/* --- 2. Controladores de las flechas --- */
-function nextSlide() {
-    if (listaIds.length === 0) return;
+// Controladores para las flechas
+document.getElementById('btnNext').onclick = function() {
     currentIndex = (currentIndex + 1) % listaIds.length;
-    mostrarImagen(currentIndex); // Esta función ya hace todo el trabajo de AJAX y URL
-}
+    mostrarImagen(currentIndex);
+};
 
-function prevSlide() {
-    if (listaIds.length === 0) return;
+document.getElementById('btnPrev').onclick = function() {
     currentIndex = (currentIndex - 1 + listaIds.length) % listaIds.length;
     mostrarImagen(currentIndex);
-}
+};
 
 function irAIndice(idx) {
     if (idx < 0 || idx >= listaIds.length) return;

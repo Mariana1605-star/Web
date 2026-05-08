@@ -94,40 +94,36 @@
             <h1 class="main-header-title text-center text-lg-start">Proyecto Primer Parcial</h1>
 
             <section id="secCarrusel" class="mb-5">
-                <div id="carouselWrapper">
-
-                    <div id="slide-container">
-                        <div class="text-center p-5">
-                            <div class="spinner-border text-light" role="status">
-                                <span class="visually-hidden">Cargando...</span>
-                            </div>
-                            <p class="mt-2 text-white-50 small">Cargando imágenes...</p>
-                        </div>
-                    </div>
-
-                    <button id="btnPrev" class="carousel-arrow" aria-label="Anterior">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2.5">
-                            <polyline points="15 18 9 12 15 6"/>
-                        </svg>
-                    </button>
-
-                    <button id="btnNext" class="carousel-arrow" aria-label="Siguiente">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2.5">
-                            <polyline points="9 18 15 12 9 6"/>
-                        </svg>
-                    </button>
-
-                    <div id="carouselIndicadores"></div>
+    <div id="carouselWrapper">
+        <div id="slide-container">
+            <div class="text-center p-5">
+                <div class="spinner-border text-light" role="status">
+                    <span class="visually-hidden">Cargando...</span>
                 </div>
+                <p class="mt-2 text-white-50 small">Cargando imágenes...</p>
+            </div>
+        </div>
 
-                <div id="infoImagen" class="card p-3 mt-2" style="display:none;">
-                    <h5 id="imgTitulo" class="mb-1"></h5>
-                    <p id="imgDescripcion" class="text-muted mb-0"></p>
-                </div>
+        <button id="btnPrev" class="carousel-arrow" aria-label="Anterior">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+        </button>
 
-            </section>
+        <button id="btnNext" class="carousel-arrow" aria-label="Siguiente">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="9 18 15 12 9 6"/>
+            </svg>
+        </button>
+
+        <div id="carouselIndicadores"></div>
+    </div>
+
+    <div id="url" class="card p-3 mt-2 shadow-sm">
+        <h5 id="imgTitulo" class="mb-1">Título de la imagen</h5>
+        <p id="imgDescripcion" class="text-muted mb-0">Descripción detallada aparecerá aquí.</p>
+    </div>
+</section>
 
             <section id="secAdmin" class="mb-5">
                 <div class="admin-panel">
